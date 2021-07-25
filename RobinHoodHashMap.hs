@@ -50,8 +50,8 @@ data Elem k v = Elem
 empty :: ST s (HashMap s k v)
 empty = do
   hashArr <- newArray initialCapacity zeroBits
-  valueArr <- newArray initialCapacity undefined
-  liftM HashMap . newSTRef $ HashMapData 0 loadFactor initialCapacity hashArr valueArr
+  elemArr <- newArray initialCapacity undefined
+  liftM HashMap . newSTRef $ HashMapData 0 loadFactor initialCapacity hashArr elemArr
   where
     initialCapacity = 256
     loadFactor = 0.9
@@ -69,9 +69,10 @@ lookup key hm@(HashMap hashMapDataRef) = do
     Just index -> Just . elemValue <$> readArray hashMapElems (fromIntegral index)
 
 insert :: (Eq k, Hashable k) => k -> v -> HashMap s k v -> ST s ()
-insert !key !value (HashMap hashMapDataRef) = do
+insert !key !value hm@(HashMap hashMapDataRef) = do
   HashMapData{..} <- readSTRef hashMapDataRef
-  when (fromIntegral hashMapSize >= fromIntegral hashMapCapacity * hashMapLoadFactor) $ grow (HashMap hashMapDataRef)
+  when (fromIntegral hashMapSize >= fromIntegral hashMapCapacity * hashMapLoadFactor) $ do
+    grow hm
   HashMapData{..} <- readSTRef hashMapDataRef
   !didAddNewKey <- insertWithoutGrowing key value (HashMap hashMapDataRef)
   when (didAddNewKey == AddedNewKey) $
@@ -207,7 +208,7 @@ grow (HashMap hashMapDataRef) = do
     !hashed <- readArray oldHashes i
     when (hashed /= 0 && not (isDeleted hashed)) $ do
       Elem k v <- readArray oldElems i
-      void $ insertWithoutGrowing k v (HashMap hashMapDataRef)
+      void $ insert k v (HashMap hashMapDataRef)
 
 lookupIndex :: (Eq k, Hashable k) => k -> HashMap s k v -> ST s (Maybe Hash)
 lookupIndex key hm@(HashMap hashMapDataRef) = do

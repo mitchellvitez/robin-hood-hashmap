@@ -184,3 +184,27 @@ prop_grow = property $ do
     insert key5 value5 h
     toList h
   sort result === sort [(key1, value1), (key2, value2), (key3, value3), (key4, value4), (key5, value5)]
+
+prop_simpleGrow :: Property
+prop_simpleGrow = property $ do
+  result <- pure $ runST $ do
+    h <- tinyEmpty
+    insert 'a' 1 h
+    insert 'b' 2 h
+    insert 'c' 3 h
+    insert 'd' 4 h
+    insert 'e' 5 h
+    insert 'f' 6 h
+    insert 'g' 7 h
+    insert 'h' 8 h
+    insert 'i' 9 h
+    insert 'j' 10 h
+    insert 'k' 11 h
+    insert 'l' 12 h
+    insert 'm' 13 h
+    insert 'n' 14 h
+    insert 'o' 15 h
+    insert 'p' 16 h
+    insert 'q' 17 h
+    toList h
+  sort result === zip ['a'..'q'] [1..17]
