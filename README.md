@@ -1,4 +1,4 @@
-# Robin Hood Hashmap in Haskell
+# Robin Hood HashMap in Haskell
 
 This is an (unfinished) implementation of a Robin Hood HashMap in the ST monad, written in Haskell
 
