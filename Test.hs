@@ -189,22 +189,22 @@ prop_simpleGrow :: Property
 prop_simpleGrow = property $ do
   result <- pure $ runST $ do
     h <- tinyEmpty
-    insert 'a' 1 h
     insert 'b' 2 h
+    insert 'g' 7 h
+    insert 'p' 16 h
+    insert 'q' 17 h
     insert 'c' 3 h
-    insert 'd' 4 h
+    insert 'h' 8 h
     insert 'e' 5 h
     insert 'f' 6 h
-    insert 'g' 7 h
-    insert 'h' 8 h
+    insert 'm' 13 h
+    insert 'n' 14 h
+    insert 'o' 15 h
+    insert 'a' 1 h
     insert 'i' 9 h
     insert 'j' 10 h
     insert 'k' 11 h
     insert 'l' 12 h
-    insert 'm' 13 h
-    insert 'n' 14 h
-    insert 'o' 15 h
-    insert 'p' 16 h
-    insert 'q' 17 h
+    insert 'd' 4 h
     toList h
   sort result === zip ['a'..'q'] [1..17]
