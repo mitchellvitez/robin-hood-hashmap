@@ -39,7 +39,6 @@ data HashMapData s k v = HashMapData
   , hashMapElems      :: {-# UNPACK #-} !(MutableArray s (Elem k v))
   }
 
--- could remove this indirection for performance
 data Elem k v = Elem
   { elemKey   :: !k
   , elemValue :: !v
@@ -78,55 +77,6 @@ insert !key !value hm@(HashMap hashMapDataRef) = do
   !didAddNewKey <- insertWithoutGrowing key value (HashMap hashMapDataRef)
   when (didAddNewKey == AddedNewKey) $
     writeSTRef hashMapDataRef HashMapData{..} { hashMapSize = hashMapSize + 1 }
-
-data DidAddNewKey = AddedNewKey | DidNotAddNewKey
-  deriving Eq
-
-insertWithoutGrowing :: (Eq k, Hashable k) => k -> v -> HashMap s k v -> ST s DidAddNewKey
-insertWithoutGrowing key value hm@(HashMap hashMapDataRef) = do
-  HashMapData{..} <- readSTRef hashMapDataRef
-  !position <- desiredPosition (hashKey key) hm
-  let nextPos p = (p + 1) .&. (fromIntegral hashMapCapacity - 1)
-
-  let
-    loopStep probeDist pos elem hash = do
-      !hashAtPos <- readArray hashMapHashes $ fromIntegral pos
-      elemAtPos <- readArray hashMapElems $ fromIntegral pos
-      probeDistOfElemAtPos <- probeDistance hashAtPos pos hm
-
-      if | hashAtPos == 0 -> do
-             -- put elem in empty slot
-             construct pos hash elem hm
-             pure AddedNewKey
-
-         | elemKey elemAtPos == elemKey elem -> do
-             -- overwrite value with same key
-             construct pos hash elem hm
-             pure DidNotAddNewKey
-
-         | probeDistOfElemAtPos < probeDist -> do
-             if isDeleted hashAtPos
-               then do
-                 -- put elem in slot occupied by deleted elem
-                 construct pos hash elem hm
-                 pure AddedNewKey
-               else do
-                 -- swap and try next position with swapped elem
-                 writeArray hashMapHashes (fromIntegral pos) hash
-                 writeArray hashMapElems (fromIntegral pos) elem
-                 loopStep (probeDist + 1) (nextPos pos) elemAtPos hashAtPos
-
-          | otherwise -> do
-              -- try next position
-              loopStep (probeDist + 1) (nextPos pos) elem hash
-
-  loopStep 0 position (Elem key value) (hashKey key)
-
-construct :: Hash -> Hash -> Elem k v -> HashMap s k v -> ST s ()
-construct pos hashed elem (HashMap hashMapDataRef) = do
-  HashMapData{..} <- readSTRef hashMapDataRef
-  writeArray hashMapHashes (fromIntegral pos) hashed
-  writeArray hashMapElems (fromIntegral pos) elem
 
 delete :: (Hashable k, Eq k) => k -> HashMap s k v -> ST s ()
 delete key hm@(HashMap hashMapDataRef) = do
@@ -205,6 +155,12 @@ probeDistance hashed slotIndex hm@(HashMap hashMapDataRef) = do
   let !capacity = fromIntegral hashMapCapacity
   pure $ (slotIndex + capacity - desiredPos) .&. (capacity - 1)
 
+construct :: Hash -> Hash -> Elem k v -> HashMap s k v -> ST s ()
+construct pos hashed elem (HashMap hashMapDataRef) = do
+  HashMapData{..} <- readSTRef hashMapDataRef
+  writeArray hashMapHashes (fromIntegral pos) hashed
+  writeArray hashMapElems (fromIntegral pos) elem
+
 grow :: (Eq k, Hashable k) => HashMap s k v -> ST s ()
 grow (HashMap hashMapDataRef) = do
   HashMapData{..} <- readSTRef hashMapDataRef
@@ -249,3 +205,45 @@ tinyEmpty = do
   where
     initialCapacity = 1
     loadFactor = 0.9
+
+data DidAddNewKey = AddedNewKey | DidNotAddNewKey
+  deriving Eq
+
+insertWithoutGrowing :: (Eq k, Hashable k) => k -> v -> HashMap s k v -> ST s DidAddNewKey
+insertWithoutGrowing key value hm@(HashMap hashMapDataRef) = do
+  HashMapData{..} <- readSTRef hashMapDataRef
+  !position <- desiredPosition (hashKey key) hm
+  let nextPos p = (p + 1) .&. (fromIntegral hashMapCapacity - 1)
+
+  let
+    loopStep probeDist pos elem hash = do
+      !hashAtPos <- readArray hashMapHashes $ fromIntegral pos
+      elemAtPos <- readArray hashMapElems $ fromIntegral pos
+      probeDistOfElemAtPos <- probeDistance hashAtPos pos hm
+
+      if | hashAtPos == 0 -> do
+             -- put elem in empty slot
+             construct pos hash elem hm
+             pure AddedNewKey
+
+         | isDeleted hashAtPos -> do
+             -- put elem in slot occupied by deleted elem
+             construct pos hash elem hm
+             pure AddedNewKey
+
+         | elemKey elemAtPos == elemKey elem -> do
+             -- overwrite value with same key
+             construct pos hash elem hm
+             pure DidNotAddNewKey
+
+         | probeDistOfElemAtPos < probeDist -> do
+             -- this makes it Robin Hood. swap and try next position with swapped elem
+             writeArray hashMapHashes (fromIntegral pos) hash
+             writeArray hashMapElems (fromIntegral pos) elem
+             loopStep (probeDist + 1) (nextPos pos) elemAtPos hashAtPos
+
+          | otherwise -> do
+              -- try next position
+              loopStep (probeDist + 1) (nextPos pos) elem hash
+
+  loopStep 0 position (Elem key value) (hashKey key)

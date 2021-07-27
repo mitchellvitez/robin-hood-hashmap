@@ -12,7 +12,7 @@ import Prelude hiding (lookup)
 import RobinHoodHashMap
 
 main :: IO ()
-main = void $ tests
+main = void tests
 
 tests :: IO Bool
 tests =
@@ -25,7 +25,7 @@ genKV :: PropertyT IO String
 genKV = forAll genStr
 
 notSameAs :: (Monad m, Foldable t) => t String -> PropertyT m String
-notSameAs kvs = forAll $ Gen.filter (`notElem` kvs) $ genStr
+notSameAs kvs = forAll $ Gen.filter (`notElem` kvs) genStr
 
 prop_doubleInsertSize :: Property
 prop_doubleInsertSize = property $ do
